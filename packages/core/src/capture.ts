@@ -3,13 +3,13 @@ import type {
   CaptureEvaluation,
   CapturePolicy,
   CaptureRequirement,
-  MockKitConfig,
+  MockPitConfig,
 } from "./model"
 import { coverageRatio } from "./model"
 import { matchesRoute } from "./route"
 
 export const evaluateCapture = (
-  config: MockKitConfig,
+  config: MockPitConfig,
   routePath: string,
   records: readonly AuditRecord[],
 ): CaptureEvaluation => {

@@ -1,7 +1,7 @@
 {
-  "name": "@mockkit/browser",
+  "name": "@mockpit/browser",
   "version": "0.0.0",
-  "description": "Browser client and audited fetch facade for MockKit.",
+  "description": "Browser client and audited fetch facade for MockPit.",
   "type": "module",
   "sideEffects": false,
   "main": "./dist/index.cjs",
@@ -18,9 +18,12 @@
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run src"
+    "test": "vitest run --root ../.. packages/browser/src"
   },
   "dependencies": {
-    "@mockkit/core": "workspace:*"
+    "@mockpit/core": "workspace:*"
+  },
+  "devDependencies": {
+    "effect": "^3.19.6"
   }
 }

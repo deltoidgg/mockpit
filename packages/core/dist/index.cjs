@@ -20,24 +20,48 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/index.ts
 var index_exports = {};
 __export(index_exports, {
+  AuditRecordKindSchema: () => AuditRecordKindSchema,
   AuditRecordSchema: () => AuditRecordSchema,
+  AuditRecordVisibilitySchema: () => AuditRecordVisibilitySchema,
   AuditStatusSchema: () => AuditStatusSchema,
   AuditStore: () => AuditStore,
+  CaptureService: () => CaptureService,
+  ClockService: () => ClockService,
+  ConfigService: () => ConfigService,
+  ExportManifestSchema: () => ExportManifestSchema,
   FieldCoverageSchema: () => FieldCoverageSchema,
-  InvalidMockKitConfig: () => InvalidMockKitConfig,
+  InvalidMockPitConfig: () => InvalidMockPitConfig,
+  MissingMockPitResource: () => MissingMockPitResource,
+  MockPitError: () => MockPitError,
+  MockPitExportError: () => MockPitExportError,
+  MockPitFallbackError: () => MockPitFallbackError,
+  MockPitParseError: () => MockPitParseError,
+  MockPitSchemaError: () => MockPitSchemaError,
+  MockPitStorageError: () => MockPitStorageError,
+  ModeStore: () => ModeStore,
   ProvenanceModeSchema: () => ProvenanceModeSchema,
+  RedactionPolicySchema: () => RedactionPolicySchema,
+  ReporterService: () => ReporterService,
   RequestDescriptorSchema: () => RequestDescriptorSchema,
+  RouteService: () => RouteService,
+  ScenarioDefinitionSchema: () => ScenarioDefinitionSchema,
+  ScenarioService: () => ScenarioService,
   SourceKindSchema: () => SourceKindSchema,
+  TransportService: () => TransportService,
   auditStatuses: () => auditStatuses,
   countSources: () => countSources,
   coverageRatio: () => coverageRatio,
   createAuditRecord: () => createAuditRecord,
+  createExportManifest: () => createExportManifest,
+  createInitialScenarioState: () => createInitialScenarioState,
   createMemoryAuditStore: () => createMemoryAuditStore,
+  createRouteAuditExport: () => createRouteAuditExport,
   defaultSourceCounts: () => defaultSourceCounts,
   defineCapturePolicy: () => defineCapturePolicy,
-  defineMockKitConfig: () => defineMockKitConfig,
+  defineMockPitConfig: () => defineMockPitConfig,
   defineRedactionPolicy: () => defineRedactionPolicy,
   defineResource: () => defineResource,
+  defineScenario: () => defineScenario,
   defineSection: () => defineSection,
   evaluateCapture: () => evaluateCapture,
   findResource: () => findResource,
@@ -51,13 +75,16 @@ __export(index_exports, {
   provenanceModes: () => provenanceModes,
   redactRecord: () => redactRecord,
   redactRecords: () => redactRecords,
+  routeAuditToMarkdown: () => routeAuditToMarkdown,
+  setScenarioVariant: () => setScenarioVariant,
   sourceKindLabels: () => sourceKindLabels,
   sourceKinds: () => sourceKinds,
   sourceRiskPriority: () => sourceRiskPriority,
   statusForSourceKind: () => statusForSourceKind,
   statusLabels: () => statusLabels,
   summariseRoute: () => summariseRoute,
-  summariseSection: () => summariseSection
+  summariseSection: () => summariseSection,
+  validateUnknownWithSchema: () => validateUnknownWithSchema
 });
 module.exports = __toCommonJS(index_exports);
 
@@ -122,6 +149,8 @@ var createAuditRecord = (input) => {
   ].join("::");
   return {
     id,
+    kind: input.kind ?? "resource",
+    visibility: input.visibility ?? "mounted",
     routePath,
     resourceKey: input.resourceKey,
     label,
@@ -136,6 +165,9 @@ var createAuditRecord = (input) => {
     ...input.fieldCoverage ? { fieldCoverage: input.fieldCoverage } : {},
     ...input.scenario ? { scenario: input.scenario } : {},
     ...input.sourceLocation ? { sourceLocation: input.sourceLocation } : {},
+    ...input.fallbackSource ? { fallbackSource: input.fallbackSource } : {},
+    ...input.remediation ? { remediation: input.remediation } : {},
+    ...input.recordedBy ? { recordedBy: input.recordedBy } : {},
     ...typeof input.proofCritical === "boolean" ? { proofCritical: input.proofCritical } : {},
     ...input.tags ? { tags: input.tags } : {},
     ...input.metadata ? { metadata: input.metadata } : {}
@@ -228,20 +260,22 @@ var evaluateRequirement = (policy, requirement, records) => {
 };
 
 // src/config.ts
-var InvalidMockKitConfig = class extends Error {
-  name = "InvalidMockKitConfig";
+var InvalidMockPitConfig = class extends Error {
+  name = "InvalidMockPitConfig";
 };
 var defineResource = (definition) => definition;
 var defineSection = (definition) => definition;
 var defineCapturePolicy = (policy) => policy;
 var defineRedactionPolicy = (policy) => policy;
-var defineMockKitConfig = (input) => {
+var defineScenario = (definition) => definition;
+var defineMockPitConfig = (input) => {
   if (!input.project.trim()) {
-    throw new InvalidMockKitConfig("MockKit config requires a non-empty project name.");
+    throw new InvalidMockPitConfig("MockPit config requires a non-empty project name.");
   }
   const resources = input.resources ?? [];
   const sections = input.sections ?? [];
   const capture = input.capture ?? [];
+  const scenarios = input.scenarios ?? [];
   assertUnique(
     resources.map((resource) => resource.key),
     "resource key"
@@ -250,11 +284,15 @@ var defineMockKitConfig = (input) => {
     sections.map((section) => section.id),
     "section id"
   );
+  assertUnique(
+    scenarios.map((scenario) => scenario.key),
+    "scenario key"
+  );
   const resourceKeys = new Set(resources.map((resource) => resource.key));
   for (const section of sections) {
     for (const resourceKey of section.resources) {
       if (!resourceKeys.has(resourceKey)) {
-        throw new InvalidMockKitConfig(
+        throw new InvalidMockPitConfig(
           `Section "${section.id}" references missing resource "${resourceKey}".`
         );
       }
@@ -263,21 +301,33 @@ var defineMockKitConfig = (input) => {
   for (const policy of capture) {
     for (const requirement of policy.required) {
       if (!resourceKeys.has(requirement.resourceKey)) {
-        throw new InvalidMockKitConfig(
+        throw new InvalidMockPitConfig(
           `Capture policy references missing resource "${requirement.resourceKey}".`
         );
       }
+    }
+  }
+  for (const scenario of scenarios) {
+    assertUnique(
+      scenario.variants.map((variant) => variant.key),
+      `variant key for scenario "${scenario.key}"`
+    );
+    if (scenario.defaultVariant && !scenario.variants.some((variant) => variant.key === scenario.defaultVariant)) {
+      throw new InvalidMockPitConfig(
+        `Scenario "${scenario.key}" default variant "${scenario.defaultVariant}" is not declared.`
+      );
     }
   }
   return {
     project: input.project,
     mode: {
       default: input.mode?.default ?? "mock",
-      storageKey: input.mode?.storageKey ?? `${input.project}.mockkit.mode`
+      storageKey: input.mode?.storageKey ?? `${input.project}.mockpit.mode`
     },
     resources,
     sections,
     capture,
+    scenarios,
     redaction: input.redaction ?? { default: "metadata-only" }
   };
 };
@@ -286,74 +336,61 @@ var assertUnique = (values, label) => {
   const seen = /* @__PURE__ */ new Set();
   for (const value of values) {
     if (!value.trim()) {
-      throw new InvalidMockKitConfig(`MockKit ${label} cannot be empty.`);
+      throw new InvalidMockPitConfig(`MockPit ${label} cannot be empty.`);
     }
     if (seen.has(value)) {
-      throw new InvalidMockKitConfig(`Duplicate MockKit ${label}: "${value}".`);
+      throw new InvalidMockPitConfig(`Duplicate MockPit ${label}: "${value}".`);
     }
     seen.add(value);
   }
 };
 
-// src/mode.ts
-var modePolicies = {
-  mock: {
-    mode: "mock",
-    allowMockTransport: true,
-    allowFallback: false,
-    showInlineHighlights: false,
-    blockUnknownCapability: false,
-    requireLiveForCapture: false,
-    requiresReloadOnChange: true
-  },
-  hybrid: {
-    mode: "hybrid",
-    allowMockTransport: false,
-    allowFallback: true,
-    showInlineHighlights: false,
-    blockUnknownCapability: false,
-    requireLiveForCapture: false,
-    requiresReloadOnChange: true
-  },
-  live: {
-    mode: "live",
-    allowMockTransport: false,
-    allowFallback: false,
-    showInlineHighlights: false,
-    blockUnknownCapability: false,
-    requireLiveForCapture: false,
-    requiresReloadOnChange: true
-  },
-  audit: {
-    mode: "audit",
-    allowMockTransport: false,
-    allowFallback: false,
-    showInlineHighlights: true,
-    blockUnknownCapability: false,
-    requireLiveForCapture: false,
-    requiresReloadOnChange: true
-  },
-  capture: {
-    mode: "capture",
-    allowMockTransport: false,
-    allowFallback: false,
-    showInlineHighlights: true,
-    blockUnknownCapability: true,
-    requireLiveForCapture: true,
-    requiresReloadOnChange: true
+// src/errors.ts
+var MockPitError = class extends Error {
+  constructor(message, code, cause) {
+    super(message);
+    this.code = code;
+    this.cause = cause;
+    this.name = "MockPitError";
+  }
+  code;
+  cause;
+};
+var MissingMockPitResource = class extends MockPitError {
+  constructor(resourceKey) {
+    super(`Unknown MockPit resource "${resourceKey}".`, "MOCKPIT_MISSING_RESOURCE");
+    this.name = "MissingMockPitResource";
   }
 };
-var getModePolicy = (mode) => modePolicies[mode];
-var statusForSourceKind = (sourceKind, mode, criticality = "proof") => {
-  if (sourceKind === "api") return "ready";
-  if (sourceKind === "mock") return mode === "mock" ? "ready" : "warning";
-  if (sourceKind === "unsupported") return "blocked";
-  if (sourceKind === "error") return "error";
-  if (sourceKind === "unknown") return mode === "capture" ? "blocked" : "unknown";
-  if (sourceKind === "authoredFallback" && criticality === "proof") {
-    return mode === "capture" ? "blocked" : "warning";
+var MockPitParseError = class extends MockPitError {
+  constructor(message, cause) {
+    super(message, "MOCKPIT_PARSE_ERROR", cause);
+    this.name = "MockPitParseError";
   }
-  return "warning";
+};
+var MockPitSchemaError = class extends MockPitError {
+  constructor(message, cause) {
+    super(message, "MOCKPIT_SCHEMA_ERROR", cause);
+    this.name = "MockPitSchemaError";
+  }
+};
+var MockPitFallbackError = class extends MockPitError {
+  constructor(message, cause) {
+    super(message, "MOCKPIT_FALLBACK_ERROR", cause);
+    this.name = "MockPitFallbackError";
+  }
+};
+var MockPitStorageError = class extends MockPitError {
+  constructor(message, cause) {
+    super(message, "MOCKPIT_STORAGE_ERROR", cause);
+    this.name = "MockPitStorageError";
+  }
+};
+var MockPitExportError = class extends MockPitError {
+  constructor(message, cause) {
+    super(message, "MOCKPIT_EXPORT_ERROR", cause);
+    this.name = "MockPitExportError";
+  }
 };
 
 // src/redaction.ts
@@ -372,6 +409,11 @@ var metadataOnlyFields = /* @__PURE__ */ new Set([
   "fieldCoverage",
   "scenario",
   "sourceLocation",
+  "kind",
+  "visibility",
+  "fallbackSource",
+  "remediation",
+  "recordedBy",
   "proofCritical",
   "tags",
   "updatedAt"
@@ -401,78 +443,6 @@ var maskValue = (value, patterns) => {
   }
   return value;
 };
-
-// src/schema.ts
-var import_effect = require("effect");
-var SourceKindSchema = import_effect.Schema.Literal(...sourceKinds);
-var AuditStatusSchema = import_effect.Schema.Literal(...auditStatuses);
-var ProvenanceModeSchema = import_effect.Schema.Literal(...provenanceModes);
-var FieldCoverageSchema = import_effect.Schema.Struct({
-  present: import_effect.Schema.Number,
-  total: import_effect.Schema.Number,
-  missing: import_effect.Schema.optional(import_effect.Schema.Array(import_effect.Schema.String)),
-  ratio: import_effect.Schema.optional(import_effect.Schema.Number)
-});
-var RequestDescriptorSchema = import_effect.Schema.Struct({
-  method: import_effect.Schema.optional(import_effect.Schema.String),
-  url: import_effect.Schema.optional(import_effect.Schema.String),
-  route: import_effect.Schema.optional(import_effect.Schema.String),
-  status: import_effect.Schema.optional(import_effect.Schema.Number)
-});
-var AuditRecordSchema = import_effect.Schema.Struct({
-  id: import_effect.Schema.String,
-  routePath: import_effect.Schema.String,
-  routePattern: import_effect.Schema.optional(import_effect.Schema.String),
-  sectionId: import_effect.Schema.optional(import_effect.Schema.String),
-  resourceKey: import_effect.Schema.String,
-  label: import_effect.Schema.String,
-  sourceKind: SourceKindSchema,
-  status: AuditStatusSchema,
-  reason: import_effect.Schema.optional(import_effect.Schema.String),
-  request: import_effect.Schema.optional(RequestDescriptorSchema),
-  operation: import_effect.Schema.optional(import_effect.Schema.String),
-  fieldCoverage: import_effect.Schema.optional(FieldCoverageSchema),
-  proofCritical: import_effect.Schema.optional(import_effect.Schema.Boolean),
-  tags: import_effect.Schema.optional(import_effect.Schema.Array(import_effect.Schema.String)),
-  updatedAt: import_effect.Schema.String
-});
-
-// src/store.ts
-var import_effect2 = require("effect");
-var AuditStore = import_effect2.Context.GenericTag("@mockkit/core/AuditStore");
-var createMemoryAuditStore = () => {
-  const records = /* @__PURE__ */ new Map();
-  const listeners = /* @__PURE__ */ new Set();
-  const notify = () => {
-    for (const listener of listeners) listener();
-  };
-  return {
-    put(record) {
-      records.set(record.id, record);
-      notify();
-    },
-    remove(id) {
-      records.delete(id);
-      notify();
-    },
-    snapshot() {
-      return Array.from(records.values()).sort(
-        (left, right) => left.updatedAt.localeCompare(right.updatedAt)
-      );
-    },
-    subscribe(listener) {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
-    clear() {
-      records.clear();
-      notify();
-    }
-  };
-};
-var makeAuditStore = import_effect2.Effect.sync(createMemoryAuditStore);
 
 // src/summary.ts
 var sourceRiskPriority = [
@@ -545,26 +515,309 @@ var summariseRoute = (config, records, routePath, mode, capture) => {
   };
 };
 var formatSourceMix = (counts) => sourceKinds.filter((sourceKind) => counts[sourceKind] > 0).map((sourceKind) => `${counts[sourceKind]} ${sourceKind}`).join(" \xB7 ") || "No records";
+
+// src/export.ts
+var createRouteAuditExport = ({
+  config,
+  routePath,
+  mode,
+  records,
+  generatedAt = (/* @__PURE__ */ new Date()).toISOString(),
+  scenarios,
+  transport,
+  redaction = config.redaction
+}) => {
+  const capture = evaluateCapture(config, routePath, records);
+  const summary = summariseRoute(config, records, routePath, mode, capture);
+  return {
+    project: config.project,
+    routePath,
+    generatedAt,
+    summary,
+    records: redactRecords(summary.records, redaction),
+    ...scenarios ? { scenarios } : {},
+    ...transport ? { transport } : {},
+    redaction
+  };
+};
+var createExportManifest = (config, exports2, generatedAt = (/* @__PURE__ */ new Date()).toISOString()) => ({
+  project: config.project,
+  generatedAt,
+  routes: exports2.map((route) => route.routePath),
+  recordCount: exports2.reduce((count, route) => count + route.records.length, 0),
+  redaction: config.redaction,
+  capture: Object.fromEntries(
+    exports2.map((route) => [route.routePath, route.summary.capture?.status ?? "not-configured"])
+  )
+});
+var routeAuditToMarkdown = (route) => {
+  const lines = [
+    `# MockPit Route Audit: ${route.routePath}`,
+    "",
+    `Project: ${route.project}`,
+    `Generated: ${route.generatedAt}`,
+    `Status: ${statusLabels[route.summary.status]}`,
+    `Highest risk: ${sourceKindLabels[route.summary.highestRisk]}`,
+    `Source mix: ${formatSourceMix(route.summary.sourceCounts)}`,
+    `Capture: ${route.summary.capture?.status ?? "not-configured"}`,
+    "",
+    "## Records",
+    "",
+    "| Resource | Source | Status | Reason |",
+    "| --- | --- | --- | --- |",
+    ...route.summary.records.map(
+      (record) => `| ${record.resourceKey} | ${sourceKindLabels[record.sourceKind]} | ${statusLabels[record.status]} | ${escapeCell(record.reason ?? "")} |`
+    )
+  ];
+  if (route.summary.capture?.blockers.length) {
+    lines.push("", "## Capture Blockers", "");
+    for (const blocker of route.summary.capture.blockers) lines.push(`- ${blocker}`);
+  }
+  lines.push("", "## Redaction", "", `Default: ${route.redaction.default ?? "metadata-only"}`);
+  return `${lines.join("\n")}
+`;
+};
+var escapeCell = (value) => value.replaceAll("|", "\\|").replace(/\s+/g, " ").trim();
+
+// src/mode.ts
+var modePolicies = {
+  mock: {
+    mode: "mock",
+    allowMockTransport: true,
+    allowFallback: false,
+    showInlineHighlights: false,
+    blockUnknownCapability: false,
+    requireLiveForCapture: false,
+    requiresReloadOnChange: true
+  },
+  hybrid: {
+    mode: "hybrid",
+    allowMockTransport: false,
+    allowFallback: true,
+    showInlineHighlights: false,
+    blockUnknownCapability: false,
+    requireLiveForCapture: false,
+    requiresReloadOnChange: true
+  },
+  live: {
+    mode: "live",
+    allowMockTransport: false,
+    allowFallback: false,
+    showInlineHighlights: false,
+    blockUnknownCapability: false,
+    requireLiveForCapture: false,
+    requiresReloadOnChange: true
+  },
+  audit: {
+    mode: "audit",
+    allowMockTransport: false,
+    allowFallback: false,
+    showInlineHighlights: true,
+    blockUnknownCapability: false,
+    requireLiveForCapture: false,
+    requiresReloadOnChange: true
+  },
+  capture: {
+    mode: "capture",
+    allowMockTransport: false,
+    allowFallback: false,
+    showInlineHighlights: true,
+    blockUnknownCapability: true,
+    requireLiveForCapture: true,
+    requiresReloadOnChange: true
+  }
+};
+var getModePolicy = (mode) => modePolicies[mode];
+var statusForSourceKind = (sourceKind, mode, criticality = "proof") => {
+  if (sourceKind === "api") return "ready";
+  if (sourceKind === "mock") return mode === "mock" ? "ready" : "warning";
+  if (sourceKind === "unsupported") return "blocked";
+  if (sourceKind === "error") return "error";
+  if (sourceKind === "unknown") return mode === "capture" ? "blocked" : "unknown";
+  if (sourceKind === "authoredFallback" && criticality === "proof") {
+    return mode === "capture" ? "blocked" : "warning";
+  }
+  return "warning";
+};
+
+// src/scenario.ts
+var createInitialScenarioState = (config, now = (/* @__PURE__ */ new Date()).toISOString()) => ({
+  selected: Object.fromEntries(
+    config.scenarios.map((scenario) => [
+      scenario.key,
+      scenario.defaultVariant ?? scenario.variants[0]?.key ?? "default"
+    ])
+  ),
+  updatedAt: now
+});
+var setScenarioVariant = (state, key, variant, now = (/* @__PURE__ */ new Date()).toISOString()) => ({
+  selected: {
+    ...state.selected,
+    [key]: variant
+  },
+  updatedAt: now
+});
+
+// src/schema.ts
+var import_effect = require("effect");
+var SourceKindSchema = import_effect.Schema.Literal(...sourceKinds);
+var AuditStatusSchema = import_effect.Schema.Literal(...auditStatuses);
+var ProvenanceModeSchema = import_effect.Schema.Literal(...provenanceModes);
+var AuditRecordKindSchema = import_effect.Schema.Literal("resource", "uiMark", "section", "transport");
+var AuditRecordVisibilitySchema = import_effect.Schema.Literal("mounted", "stale", "unmounted");
+var FieldCoverageSchema = import_effect.Schema.Struct({
+  present: import_effect.Schema.Number,
+  total: import_effect.Schema.Number,
+  missing: import_effect.Schema.optional(import_effect.Schema.Array(import_effect.Schema.String)),
+  ratio: import_effect.Schema.optional(import_effect.Schema.Number)
+});
+var RequestDescriptorSchema = import_effect.Schema.Struct({
+  method: import_effect.Schema.optional(import_effect.Schema.String),
+  url: import_effect.Schema.optional(import_effect.Schema.String),
+  route: import_effect.Schema.optional(import_effect.Schema.String),
+  status: import_effect.Schema.optional(import_effect.Schema.Number)
+});
+var AuditRecordSchema = import_effect.Schema.Struct({
+  id: import_effect.Schema.String,
+  kind: import_effect.Schema.optional(AuditRecordKindSchema),
+  visibility: import_effect.Schema.optional(AuditRecordVisibilitySchema),
+  routePath: import_effect.Schema.String,
+  routePattern: import_effect.Schema.optional(import_effect.Schema.String),
+  sectionId: import_effect.Schema.optional(import_effect.Schema.String),
+  resourceKey: import_effect.Schema.String,
+  label: import_effect.Schema.String,
+  sourceKind: SourceKindSchema,
+  status: AuditStatusSchema,
+  reason: import_effect.Schema.optional(import_effect.Schema.String),
+  request: import_effect.Schema.optional(RequestDescriptorSchema),
+  operation: import_effect.Schema.optional(import_effect.Schema.String),
+  fieldCoverage: import_effect.Schema.optional(FieldCoverageSchema),
+  fallbackSource: import_effect.Schema.optional(import_effect.Schema.String),
+  remediation: import_effect.Schema.optional(import_effect.Schema.String),
+  recordedBy: import_effect.Schema.optional(import_effect.Schema.String),
+  proofCritical: import_effect.Schema.optional(import_effect.Schema.Boolean),
+  tags: import_effect.Schema.optional(import_effect.Schema.Array(import_effect.Schema.String)),
+  updatedAt: import_effect.Schema.String
+});
+var ScenarioDefinitionSchema = import_effect.Schema.Struct({
+  key: import_effect.Schema.String,
+  label: import_effect.Schema.String,
+  variants: import_effect.Schema.Array(
+    import_effect.Schema.Struct({
+      key: import_effect.Schema.String,
+      label: import_effect.Schema.String,
+      description: import_effect.Schema.optional(import_effect.Schema.String)
+    })
+  ),
+  defaultVariant: import_effect.Schema.optional(import_effect.Schema.String)
+});
+var RedactionPolicySchema = import_effect.Schema.Struct({
+  default: import_effect.Schema.optional(import_effect.Schema.Literal("metadata-only", "include-values")),
+  allowFields: import_effect.Schema.optional(import_effect.Schema.Array(import_effect.Schema.String))
+});
+var ExportManifestSchema = import_effect.Schema.Struct({
+  project: import_effect.Schema.String,
+  generatedAt: import_effect.Schema.String,
+  routes: import_effect.Schema.Array(import_effect.Schema.String),
+  recordCount: import_effect.Schema.Number,
+  redaction: RedactionPolicySchema
+});
+var validateUnknownWithSchema = (schema, value) => {
+  if (!schema) return value;
+  return import_effect.Schema.decodeUnknownSync(schema)(value);
+};
+
+// src/services.ts
+var import_effect2 = require("effect");
+var ModeStore = import_effect2.Context.GenericTag("@mockpit/core/ModeStore");
+var ConfigService = import_effect2.Context.GenericTag("@mockpit/core/ConfigService");
+var RouteService = import_effect2.Context.GenericTag("@mockpit/core/RouteService");
+var ClockService = import_effect2.Context.GenericTag("@mockpit/core/ClockService");
+var ReporterService = import_effect2.Context.GenericTag("@mockpit/core/ReporterService");
+var ScenarioService = import_effect2.Context.GenericTag("@mockpit/core/ScenarioService");
+var CaptureService = import_effect2.Context.GenericTag("@mockpit/core/CaptureService");
+var TransportService = import_effect2.Context.GenericTag("@mockpit/core/TransportService");
+
+// src/store.ts
+var import_effect3 = require("effect");
+var AuditStore = import_effect3.Context.GenericTag("@mockpit/core/AuditStore");
+var createMemoryAuditStore = () => {
+  const records = /* @__PURE__ */ new Map();
+  const listeners = /* @__PURE__ */ new Set();
+  const notify = () => {
+    for (const listener of listeners) listener();
+  };
+  return {
+    put(record) {
+      records.set(record.id, record);
+      notify();
+    },
+    remove(id) {
+      records.delete(id);
+      notify();
+    },
+    snapshot() {
+      return Array.from(records.values()).sort(
+        (left, right) => left.updatedAt.localeCompare(right.updatedAt)
+      );
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    clear() {
+      records.clear();
+      notify();
+    }
+  };
+};
+var makeAuditStore = import_effect3.Effect.sync(createMemoryAuditStore);
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  AuditRecordKindSchema,
   AuditRecordSchema,
+  AuditRecordVisibilitySchema,
   AuditStatusSchema,
   AuditStore,
+  CaptureService,
+  ClockService,
+  ConfigService,
+  ExportManifestSchema,
   FieldCoverageSchema,
-  InvalidMockKitConfig,
+  InvalidMockPitConfig,
+  MissingMockPitResource,
+  MockPitError,
+  MockPitExportError,
+  MockPitFallbackError,
+  MockPitParseError,
+  MockPitSchemaError,
+  MockPitStorageError,
+  ModeStore,
   ProvenanceModeSchema,
+  RedactionPolicySchema,
+  ReporterService,
   RequestDescriptorSchema,
+  RouteService,
+  ScenarioDefinitionSchema,
+  ScenarioService,
   SourceKindSchema,
+  TransportService,
   auditStatuses,
   countSources,
   coverageRatio,
   createAuditRecord,
+  createExportManifest,
+  createInitialScenarioState,
   createMemoryAuditStore,
+  createRouteAuditExport,
   defaultSourceCounts,
   defineCapturePolicy,
-  defineMockKitConfig,
+  defineMockPitConfig,
   defineRedactionPolicy,
   defineResource,
+  defineScenario,
   defineSection,
   evaluateCapture,
   findResource,
@@ -578,12 +831,15 @@ var formatSourceMix = (counts) => sourceKinds.filter((sourceKind) => counts[sour
   provenanceModes,
   redactRecord,
   redactRecords,
+  routeAuditToMarkdown,
+  setScenarioVariant,
   sourceKindLabels,
   sourceKinds,
   sourceRiskPriority,
   statusForSourceKind,
   statusLabels,
   summariseRoute,
-  summariseSection
+  summariseSection,
+  validateUnknownWithSchema
 });
 //# sourceMappingURL=index.cjs.map

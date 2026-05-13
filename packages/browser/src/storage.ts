@@ -1,10 +1,10 @@
-export interface MockKitStorage {
+export interface MockPitStorage {
   readonly get: (key: string) => string | null
   readonly set: (key: string, value: string) => void
   readonly remove: (key: string) => void
 }
 
-export const createMemoryStorage = (): MockKitStorage => {
+export const createMemoryStorage = (): MockPitStorage => {
   const values = new Map<string, string>()
   return {
     get: (key) => values.get(key) ?? null,
@@ -17,7 +17,7 @@ export const createMemoryStorage = (): MockKitStorage => {
   }
 }
 
-export const createBrowserStorage = (): MockKitStorage => {
+export const createBrowserStorage = (): MockPitStorage => {
   if (typeof window === "undefined" || !window.localStorage) {
     return createMemoryStorage()
   }

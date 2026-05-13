@@ -1,16 +1,24 @@
 // src/client.ts
 import {
   createAuditRecord,
+  createRouteAuditExport,
   createMemoryAuditStore,
-  defineMockKitConfig,
+  defineMockPitConfig,
   evaluateCapture,
   findResource,
   getModePolicy,
   matchesRoute,
-  redactRecords,
+  MissingMockPitResource,
+  MockPitFallbackError,
+  MockPitParseError,
+  MockPitSchemaError,
+  routeAuditToMarkdown,
+  createInitialScenarioState,
+  setScenarioVariant,
   statusForSourceKind,
-  summariseRoute
-} from "@mockkit/core";
+  summariseRoute,
+  validateUnknownWithSchema
+} from "@mockpit/core";
 
 // src/storage.ts
 var createMemoryStorage = () => {
@@ -36,22 +44,73 @@ var createBrowserStorage = () => {
   };
 };
 
-// src/client.ts
-var MockKitResourceError = class extends Error {
-  name = "MockKitResourceError";
+// src/route.ts
+var createManualRouteAdapter = (initialRoutePath = "/", initialRoutePattern) => {
+  let routePath = initialRoutePath;
+  let routePattern = initialRoutePattern;
+  const listeners = /* @__PURE__ */ new Set();
+  return {
+    getRoutePath: () => routePath,
+    getRoutePattern: () => routePattern,
+    setRoute(nextRoutePath, nextRoutePattern) {
+      routePath = nextRoutePath;
+      routePattern = nextRoutePattern;
+      for (const listener of listeners) listener();
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    }
+  };
 };
-var createMockKitClient = (options = {}) => {
-  const config = options.config ?? defineMockKitConfig({
-    project: "mockkit"
+var createBrowserRouteAdapter = () => {
+  const getRoutePath = () => {
+    if (typeof window === "undefined") return "/";
+    return `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  };
+  return {
+    getRoutePath,
+    subscribe(listener) {
+      if (typeof window === "undefined") return () => void 0;
+      const notify = () => listener();
+      window.addEventListener("popstate", notify);
+      window.addEventListener("hashchange", notify);
+      return () => {
+        window.removeEventListener("popstate", notify);
+        window.removeEventListener("hashchange", notify);
+      };
+    }
+  };
+};
+
+// src/client.ts
+var MOCKPIT_BROWSER_VERSION = "0.2.0";
+var MockPitResourceError = class extends Error {
+  name = "MockPitResourceError";
+};
+var createMockPitClient = (options = {}) => {
+  const config = options.config ?? defineMockPitConfig({
+    project: "mockpit"
   });
   const storage = options.storage ?? createBrowserStorage();
   const fetchImplementation = options.fetch ?? globalThis.fetch?.bind(globalThis);
-  const getRoutePath = options.getRoutePath ?? defaultRoutePath;
+  const manualRouteAdapter = createManualRouteAdapter(options.getRoutePath?.() ?? defaultRoutePath());
+  const routeAdapter = options.routeAdapter ?? (options.getRoutePath ? { getRoutePath: options.getRoutePath } : createBrowserRouteAdapter());
+  const getRoutePath = () => routeOverride?.routePath ?? routeAdapter.getRoutePath();
   const now = options.now ?? (() => (/* @__PURE__ */ new Date()).toISOString());
   const store = createMemoryAuditStore();
   const listeners = /* @__PURE__ */ new Set();
+  let cachedSnapshot;
   let mode = readStoredMode(storage, config.mode.storageKey, config.mode.default);
+  let routeOverride;
+  let scenarios = readScenarioState(storage, scenarioStorageKey(config), config, now());
+  let transport = {
+    mockTransportActive: mode === "mock",
+    cleanupRequired: false,
+    requiresReload: false
+  };
   const notify = () => {
+    cachedSnapshot = void 0;
     for (const listener of listeners) listener();
   };
   const record = (input) => {
@@ -63,29 +122,37 @@ var createMockKitClient = (options = {}) => {
     const criticality = resource?.criticality ?? section?.criticality ?? "proof";
     const record2 = createAuditRecord({
       ...input,
+      kind: input.kind ?? "resource",
       routePath,
+      routePattern: input.routePattern ?? routeOverride?.routePattern ?? routeAdapter.getRoutePattern?.(),
       sectionId: input.sectionId ?? section?.id,
       label: input.label ?? resource?.label ?? input.resourceKey,
       status: input.status ?? statusForSourceKind(input.sourceKind, mode, criticality),
       proofCritical: input.proofCritical ?? criticality === "proof",
       updatedAt: now()
     });
+    cachedSnapshot = void 0;
     store.put(record2);
     return record2;
   };
   const snapshot = () => {
+    if (cachedSnapshot) return cachedSnapshot;
     const routePath = getRoutePath();
     const records = store.snapshot();
     const capture = evaluateCapture(config, routePath, records);
     const summary = summariseRoute(config, records, routePath, mode, capture);
-    return {
+    cachedSnapshot = {
+      version: MOCKPIT_BROWSER_VERSION,
       project: config.project,
       mode,
       routePath,
       records,
       summary,
+      scenarios,
+      transport,
       updatedAt: now()
     };
+    return cachedSnapshot;
   };
   const client = {
     config,
@@ -94,11 +161,11 @@ var createMockKitClient = (options = {}) => {
     },
     async fetch(resourceKey, input, init) {
       if (!fetchImplementation) {
-        throw new MockKitResourceError("MockKit fetch requires a fetch implementation.");
+        throw new MockPitResourceError("MockPit fetch requires a fetch implementation.");
       }
       const resource = findResource(config, resourceKey);
       if (!resource) {
-        throw new MockKitResourceError(`Unknown MockKit resource "${resourceKey}".`);
+        throw new MissingMockPitResource(resourceKey);
       }
       const request = normaliseFetchOptions(input, init);
       const descriptor = requestDescriptor(request);
@@ -107,7 +174,8 @@ var createMockKitClient = (options = {}) => {
       try {
         const response = await fetchImplementation(request.input, request.init);
         const parsed = await parseResponse(response, request.parse);
-        const assessment = await assess(resource, parsed, routePath, descriptor);
+        const validated = validateResourceData(resource, parsed);
+        const assessment = await assess(resource, validated, routePath, descriptor);
         if ((assessment.empty || assessment.unsupported) && policy.allowFallback && resource.fallback) {
           return resolveFallback(resource, routePath, descriptor, assessment.reason, assessment);
         }
@@ -120,9 +188,10 @@ var createMockKitClient = (options = {}) => {
           reason: assessment.reason ?? (response.ok ? `Loaded from ${descriptor.route ?? descriptor.url ?? "request"}.` : response.statusText),
           request: { ...descriptor, status: response.status },
           fieldCoverage: assessment.coverage,
-          metadata: assessment.metadata
+          metadata: assessment.metadata,
+          remediation: resource.remediation
         });
-        return parsed;
+        return validated;
       } catch (error) {
         if (policy.allowFallback && resource.fallback) {
           return resolveFallback(
@@ -140,6 +209,7 @@ var createMockKitClient = (options = {}) => {
           status: "error",
           reason: error instanceof Error ? error.message : "Request failed.",
           request: descriptor,
+          remediation: resource.remediation,
           metadata: { error }
         });
         throw error;
@@ -149,6 +219,7 @@ var createMockKitClient = (options = {}) => {
       try {
         const value = await operation();
         record({
+          kind: "resource",
           resourceKey,
           sourceKind: options2?.sourceKind ?? "api",
           reason: options2?.reason ?? "Loaded through wrapped operation."
@@ -156,6 +227,7 @@ var createMockKitClient = (options = {}) => {
         return value;
       } catch (error) {
         record({
+          kind: "resource",
           resourceKey,
           sourceKind: "error",
           status: "error",
@@ -165,35 +237,88 @@ var createMockKitClient = (options = {}) => {
       }
     },
     record,
-    recordUiMark: record,
+    recordResource: (input) => record({ ...input, kind: "resource" }),
+    recordUiMark: (input) => record({ ...input, kind: "uiMark", recordedBy: input.recordedBy ?? "ui" }),
+    recordTransportIssue: (input) => record({ ...input, kind: "transport", recordedBy: input.recordedBy ?? "transport" }),
     remove(id) {
+      cachedSnapshot = void 0;
       store.remove(id);
     },
     clear() {
+      cachedSnapshot = void 0;
       store.clear();
     },
     getMode: () => mode,
     setMode(nextMode) {
+      const previousMode = mode;
       mode = nextMode;
       storage.set(config.mode.storageKey, nextMode);
+      const transition = {
+        previousMode,
+        nextMode,
+        requiresReload: previousMode !== nextMode && (previousMode === "mock" || nextMode === "mock"),
+        transportCleanupRequired: previousMode === "mock" && nextMode !== "mock" && transport.mockTransportActive,
+        reason: previousMode === "mock" && nextMode !== "mock" ? "Leaving mock mode may require MSW cleanup and a reload." : void 0
+      };
+      transport = {
+        ...transport,
+        mockTransportActive: nextMode === "mock",
+        cleanupRequired: transition.transportCleanupRequired,
+        requiresReload: transition.requiresReload
+      };
+      notify();
+      return transition;
+    },
+    async cleanupTransport() {
+      if (!options.cleanupTransport) {
+        transport = { ...transport, cleanupRequired: false };
+        notify();
+        return;
+      }
+      const result = await options.cleanupTransport();
+      transport = {
+        ...transport,
+        cleanupRequired: false,
+        requiresReload: result.unregistered > 0,
+        lastCleanup: { ...result, updatedAt: now() }
+      };
       notify();
     },
     getRoutePath,
+    setRoute(routePath, routePattern) {
+      routeOverride = { routePath, ...routePattern ? { routePattern } : {} };
+      manualRouteAdapter.setRoute(routePath, routePattern);
+      notify();
+    },
+    setScenario(key, variant) {
+      scenarios = setScenarioVariant(scenarios, key, variant, now());
+      storage.set(scenarioStorageKey(config), JSON.stringify(scenarios));
+      notify();
+      return scenarios;
+    },
+    getScenarioState: () => scenarios,
+    getTransportState: () => transport,
+    setTransportState(state) {
+      transport = { ...transport, ...state };
+      notify();
+    },
     snapshot,
+    exportRoute(options2) {
+      return createRouteAuditExport({
+        config,
+        routePath: options2?.routePath ?? getRoutePath(),
+        mode,
+        records: store.snapshot(),
+        generatedAt: now(),
+        scenarios,
+        transport
+      });
+    },
+    exportMarkdown(options2) {
+      return routeAuditToMarkdown(client.exportRoute(options2));
+    },
     exportJson() {
-      const current = snapshot();
-      return JSON.stringify(
-        {
-          ...current,
-          records: redactRecords(current.records, config.redaction),
-          summary: {
-            ...current.summary,
-            records: redactRecords(current.summary.records, config.redaction)
-          }
-        },
-        null,
-        2
-      );
+      return JSON.stringify(client.exportRoute(), null, 2);
     },
     subscribe(listener) {
       const removeStoreListener = store.subscribe(listener);
@@ -212,26 +337,33 @@ var createMockKitClient = (options = {}) => {
       }
     });
   }
-  if (options.exposeGlobal !== false) exposeMockKitGlobal(client);
+  if (options.exposeGlobal !== false) exposeMockPitGlobal(client);
   async function resolveFallback(resource, routePath, request, reason = "Live data unavailable.", assessment, error) {
     if (!resource.fallback) {
-      throw new MockKitResourceError(`Resource "${resource.key}" has no fallback resolver.`);
+      throw new MockPitFallbackError(`Resource "${resource.key}" has no fallback resolver.`);
     }
-    const fallback = await resource.fallback({
-      resourceKey: resource.key,
-      routePath,
-      reason,
-      request,
-      error,
-      assessment
-    });
+    let fallback;
+    try {
+      fallback = await resource.fallback({
+        resourceKey: resource.key,
+        routePath,
+        reason,
+        request,
+        error,
+        assessment
+      });
+    } catch (fallbackError) {
+      throw new MockPitFallbackError(`Fallback resolver failed for "${resource.key}".`, fallbackError);
+    }
     record({
       resourceKey: resource.key,
       sourceKind: "fallback",
       status: statusForSourceKind("fallback", mode, resource.criticality),
       reason,
       request,
-      metadata: { fallback: true }
+      fallbackSource: resource.fallbackSource,
+      remediation: resource.remediation,
+      metadata: { fallback: true, fallbackSource: resource.fallbackSource }
     });
     return fallback;
   }
@@ -243,8 +375,9 @@ var normaliseFetchOptions = (input, init) => {
 };
 var isFetchOptions = (input) => Boolean(input && typeof input === "object" && "input" in input);
 var requestDescriptor = (options) => {
-  const method = options.init?.method?.toUpperCase() ?? "GET";
-  const url = String(options.input);
+  const request = options.input instanceof Request ? options.input : void 0;
+  const method = (options.init?.method ?? request?.method ?? "GET").toUpperCase();
+  const url = request?.url ?? String(options.input);
   return {
     method,
     url,
@@ -255,17 +388,29 @@ var parseResponse = async (response, parser) => {
   if (parser) return parser(response);
   const contentType = response.headers.get("content-type") ?? "";
   if (!response.ok) {
-    throw new MockKitResourceError(`Request failed with HTTP ${response.status}.`);
+    throw new MockPitParseError(`Request failed with HTTP ${response.status}.`);
   }
-  if (contentType.includes("application/json")) return response.json();
-  return response.text();
+  try {
+    if (contentType.includes("application/json")) return response.json();
+    return response.text();
+  } catch (error) {
+    throw new MockPitParseError("Response parsing failed.", error);
+  }
+};
+var validateResourceData = (resource, data) => {
+  if (!resource.schema) return data;
+  try {
+    return validateUnknownWithSchema(resource.schema, data);
+  } catch (error) {
+    throw new MockPitSchemaError(`Schema validation failed for "${resource.key}".`, error);
+  }
 };
 var assess = async (resource, data, routePath, request) => {
   if (!resource.assess) return {};
   return resource.assess(data, { resourceKey: resource.key, routePath, request });
 };
 var classifyResponse = (response, mode) => {
-  const sourceHeader = response.headers.get("x-mockkit-source") ?? response.headers.get("x-provenance-source");
+  const sourceHeader = response.headers.get("x-mockpit-source") ?? response.headers.get("x-provenance-source");
   if (sourceHeader === "mock") return "mock";
   if (mode === "mock") return "mock";
   return "api";
@@ -281,18 +426,34 @@ var defaultRoutePath = () => {
   if (typeof window === "undefined") return "/";
   return `${window.location.pathname}${window.location.search}`;
 };
-var exposeMockKitGlobal = (client) => {
+var exposeMockPitGlobal = (client) => {
   if (typeof window === "undefined") return;
-  window.__MOCKKIT__ = {
+  window.__MOCKPIT__ = {
+    version: MOCKPIT_BROWSER_VERSION,
     client,
     snapshot: () => client.snapshot(),
+    exportRoute: (options) => client.exportRoute(options),
     subscribe: (listener) => client.subscribe(listener)
   };
 };
+var scenarioStorageKey = (config) => `${config.project}.mockpit.scenarios`;
+var readScenarioState = (storage, key, config, now) => {
+  const value = storage.get(key);
+  if (!value) return createInitialScenarioState(config, now);
+  try {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed === "object" && parsed.selected) return parsed;
+  } catch {
+  }
+  return createInitialScenarioState(config, now);
+};
 export {
-  MockKitResourceError,
+  MOCKPIT_BROWSER_VERSION,
+  MockPitResourceError,
+  createBrowserRouteAdapter,
   createBrowserStorage,
+  createManualRouteAdapter,
   createMemoryStorage,
-  createMockKitClient
+  createMockPitClient
 };
 //# sourceMappingURL=index.js.map

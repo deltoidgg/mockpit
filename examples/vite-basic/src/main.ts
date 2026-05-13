@@ -1,14 +1,14 @@
 import "./styles.css"
-import { createMockKitClient } from "@mockkit/browser"
-import { defineCapturePolicy, defineMockKitConfig, defineResource, defineSection } from "@mockkit/core"
-import { defineAllMockKitElements, mountMockKitDevtools } from "@mockkit/devtools"
+import { createMockPitClient } from "@mockpit/browser"
+import { defineCapturePolicy, defineMockPitConfig, defineResource, defineSection } from "@mockpit/core"
+import { defineAllMockPitElements, mountMockPitDevtools } from "@mockpit/devtools"
 
 interface CustomersResponse {
   readonly customers: readonly { readonly id: string; readonly name: string; readonly score: number }[]
 }
 
-const config = defineMockKitConfig({
-  project: "mockkit-vite-basic",
+const config = defineMockPitConfig({
+  project: "mockpit-vite-basic",
   mode: { default: "mock" },
   resources: [
     defineResource<CustomersResponse>({
@@ -108,19 +108,19 @@ const config = defineMockKitConfig({
   ],
 })
 
-const mockkit = createMockKitClient({
+const mockpit = createMockPitClient({
   config,
   fetch: fakeFetch,
 })
 
-defineAllMockKitElements()
-mountMockKitDevtools({ client: mockkit, position: "bottom-left", panelPosition: "right" })
+defineAllMockPitElements()
+mountMockPitDevtools({ client: mockpit, position: "bottom-left", panelPosition: "right" })
 
 const app = document.querySelector<HTMLDivElement>("#app")
 if (!app) throw new Error("App root missing.")
 
 app.innerHTML = `
-  <h1>MockKit Vite Example</h1>
+  <h1>MockPit Vite Example</h1>
   <p>This page deliberately records live, mock, fallback, empty, unsupported, error, derived, hardcoded, authored fallback, and unknown sources.</p>
   <div class="layout">
     <aside class="panel">
@@ -140,15 +140,15 @@ app.innerHTML = `
       <div class="cards">
         <div class="card">
           <strong>Derived score delta</strong>
-          <p><mockkit-mark data-resource-key="ui.customers.scoreDelta" data-source-kind="derived" data-label="Score delta" data-reason="Computed in the browser from current and previous scores.">+12%</mockkit-mark></p>
+          <p><mockpit-mark data-resource-key="ui.customers.scoreDelta" data-source-kind="derived" data-label="Score delta" data-reason="Computed in the browser from current and previous scores.">+12%</mockpit-mark></p>
         </div>
         <div class="card">
           <strong>Hardcoded empty state</strong>
-          <p><mockkit-mark data-resource-key="ui.customers.emptyState" data-source-kind="hardcoded" data-label="Customer empty state copy">No customers match this filter.</mockkit-mark></p>
+          <p><mockpit-mark data-resource-key="ui.customers.emptyState" data-source-kind="hardcoded" data-label="Customer empty state copy">No customers match this filter.</mockpit-mark></p>
         </div>
         <div class="card">
           <strong>Authored fallback narrative</strong>
-          <p><mockkit-mark data-resource-key="ui.customers.narrative" data-source-kind="authoredFallback" data-label="Fallback narrative">Customer impact summary will appear when live evidence exists.</mockkit-mark></p>
+          <p><mockpit-mark data-resource-key="ui.customers.narrative" data-source-kind="authoredFallback" data-label="Fallback narrative">Customer impact summary will appear when live evidence exists.</mockpit-mark></p>
         </div>
       </div>
       <h2>Output</h2>
@@ -164,17 +164,17 @@ document.addEventListener("click", async (event) => {
   if (!button) return
   const action = button.dataset.action
   try {
-    if (action === "api") write(await mockkit.fetch("customers.list", "/api/customers"))
-    if (action === "mock") write(await mockkit.fetch("customers.mock", "/api/mock-profile"))
+    if (action === "api") write(await mockpit.fetch("customers.list", "/api/customers"))
+    if (action === "mock") write(await mockpit.fetch("customers.mock", "/api/mock-profile"))
     if (action === "fallback") {
-      mockkit.setMode("hybrid")
-      write(await mockkit.fetch("customers.recommendations", "/api/recommendations"))
+      mockpit.setMode("hybrid")
+      write(await mockpit.fetch("customers.recommendations", "/api/recommendations"))
     }
-    if (action === "empty") write(await mockkit.fetch("customers.evidence", "/api/evidence"))
-    if (action === "unsupported") write(await mockkit.fetch("customers.unsupported", "/api/unsupported"))
-    if (action === "error") await mockkit.fetch("customers.error", "/api/error")
+    if (action === "empty") write(await mockpit.fetch("customers.evidence", "/api/evidence"))
+    if (action === "unsupported") write(await mockpit.fetch("customers.unsupported", "/api/unsupported"))
+    if (action === "error") await mockpit.fetch("customers.error", "/api/error")
     if (action === "unknown") {
-      mockkit.record({
+      mockpit.record({
         resourceKey: "unknown.uninstrumented",
         label: "Uninstrumented lookup",
         sourceKind: "unknown",
@@ -183,11 +183,11 @@ document.addEventListener("click", async (event) => {
       write({ unknown: true })
     }
     if (action === "audit") {
-      mockkit.setMode("audit")
+      mockpit.setMode("audit")
       write({ mode: "audit" })
     }
     if (action === "capture") {
-      mockkit.setMode("capture")
+      mockpit.setMode("capture")
       write({ mode: "capture" })
     }
   } catch (error) {
@@ -208,7 +208,7 @@ async function fakeFetch(input: RequestInfo | URL): Promise<Response> {
   if (url.endsWith("/api/mock-profile")) {
     return json(
       { id: "mock_1", name: "Mock Customer" },
-      { headers: { "x-mockkit-source": "mock" } },
+      { headers: { "x-mockpit-source": "mock" } },
     )
   }
   if (url.endsWith("/api/recommendations")) {

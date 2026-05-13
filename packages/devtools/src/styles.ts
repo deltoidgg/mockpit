@@ -147,6 +147,34 @@ button, select {
   margin: 12px 0;
 }
 
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--mk-border);
+  border-radius: 8px;
+  padding: 8px;
+  margin: 10px 0;
+  background: #fff;
+}
+
+.filters label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--mk-muted);
+  font-size: 11px;
+}
+
+.filters select {
+  border: 1px solid var(--mk-border);
+  border-radius: 6px;
+  background: #fff;
+  padding: 4px 6px;
+  color: var(--mk-text);
+}
+
 .mode {
   border: 1px solid var(--mk-border);
   background: #fff;

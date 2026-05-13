@@ -33,10 +33,11 @@ __export(index_exports, {
   cleanupMswWorkers: () => cleanupMswWorkers,
   extractRequest: () => extractRequest,
   isCriticalRequest: () => isCriticalRequest,
+  recordCriticalUnhandledRequest: () => recordCriticalUnhandledRequest,
   resolveClient: () => resolveClient,
-  setupMockKitServer: () => setupMockKitServer,
-  setupMockKitWorker: () => setupMockKitWorker,
-  withMockKitHandler: () => withMockKitHandler
+  setupMockPitServer: () => setupMockPitServer,
+  setupMockPitWorker: () => setupMockPitWorker,
+  withMockPitHandler: () => withMockPitHandler
 });
 module.exports = __toCommonJS(index_exports);
 
@@ -66,7 +67,7 @@ var cleanupMswWorkers = async ({
 var resolveClient = (client) => {
   if (client) return client;
   if (typeof window === "undefined") return void 0;
-  return window.__MOCKKIT__?.client;
+  return window.__MOCKPIT__?.client;
 };
 var extractRequest = (value) => {
   const candidate = value;
@@ -95,17 +96,36 @@ var isCriticalRequest = (request, critical = []) => {
     return matcher === route || matcher === fullRoute;
   });
 };
+var recordCriticalUnhandledRequest = (mockpit, request) => {
+  const record = mockpit?.recordTransportIssue({
+    resourceKey: `transport.${request.method}.${request.url}`,
+    label: "Unhandled critical mock request",
+    sourceKind: "unknown",
+    status: "blocked",
+    reason: "Critical request was not handled by mock transport.",
+    request: {
+      method: request.method,
+      url: request.url,
+      route: `${request.method} ${request.url}`
+    },
+    metadata: { adapter: "msw" }
+  });
+  if (!record || !mockpit) return;
+  mockpit.setTransportState({
+    issues: [...mockpit.getTransportState().issues ?? [], record]
+  });
+};
 var safePathname = (url) => {
   try {
-    return new URL(url, "http://mockkit.local").pathname;
+    return new URL(url, "http://mockpit.local").pathname;
   } catch {
     return url;
   }
 };
 
 // src/handlers.ts
-var withMockKitHandler = (resourceKey, resolver, options = {}) => async (...args) => {
-  const client = resolveClient(options.mockkit);
+var withMockPitHandler = (resourceKey, resolver, options = {}) => async (...args) => {
+  const client = resolveClient(options.mockpit);
   try {
     const result = await resolver(...args);
     const request = extractRequest(args[0]);
@@ -114,6 +134,7 @@ var withMockKitHandler = (resourceKey, resolver, options = {}) => async (...args
       label: options.label,
       sourceKind: "mock",
       reason: "Served by MSW handler.",
+      recordedBy: "msw",
       request: request ? {
         method: request.method,
         url: request.url,
@@ -124,7 +145,20 @@ var withMockKitHandler = (resourceKey, resolver, options = {}) => async (...args
         ...options.scenario ? { scenario: options.scenario } : {}
       }
     });
-    return result;
+    client?.setTransportState({
+      mockTransportActive: true,
+      handlers: [
+        ...client.getTransportState().handlers ?? [],
+        {
+          resourceKey,
+          method: options.method ?? request?.method,
+          url: options.url ?? request?.url,
+          label: options.label,
+          scenario: options.scenario
+        }
+      ]
+    });
+    return tagMockResponse(result);
   } catch (error) {
     client?.record({
       resourceKey,
@@ -139,96 +173,114 @@ var withMockKitHandler = (resourceKey, resolver, options = {}) => async (...args
 };
 var safePathname2 = (url) => {
   try {
-    return new URL(url, "http://mockkit.local").pathname;
+    return new URL(url, "http://mockpit.local").pathname;
   } catch {
     return url;
   }
 };
+var tagMockResponse = (result) => {
+  if (typeof Response === "undefined" || !(result instanceof Response)) return result;
+  const headers = new Headers(result.headers);
+  headers.set("x-mockpit-source", "mock");
+  return new Response(result.body, {
+    status: result.status,
+    statusText: result.statusText,
+    headers
+  });
+};
 
 // src/server.ts
-var setupMockKitServer = async ({
-  mockkit,
+var setupMockPitServer = async ({
+  mockpit,
   handlers,
   critical = []
 }) => {
   const { setupServer } = await import("msw/node");
   const server = setupServer(...handlers);
   const originalListen = server.listen.bind(server);
+  const originalClose = server.close.bind(server);
   return {
     ...server,
-    listen(options = {}) {
+    listen(options) {
+      const listenOptions = options ?? {};
+      mockpit?.setTransportState({
+        mockTransportActive: true,
+        cleanupRequired: false,
+        requiresReload: false
+      });
       return originalListen({
-        ...options,
+        ...listenOptions,
         onUnhandledRequest(request, print) {
           const criticalRequest = extractRequest(request);
           if (criticalRequest && isCriticalRequest(criticalRequest, critical)) {
-            mockkit?.record({
-              resourceKey: `transport.${criticalRequest.method}.${criticalRequest.url}`,
-              label: "Unhandled critical mock request",
-              sourceKind: "unknown",
-              status: "blocked",
-              reason: "Critical request was not handled by mock transport.",
-              request: {
-                method: criticalRequest.method,
-                url: criticalRequest.url,
-                route: `${criticalRequest.method} ${criticalRequest.url}`
-              },
-              metadata: { adapter: "msw" }
-            });
+            recordCriticalUnhandledRequest(mockpit, criticalRequest);
           }
-          if (typeof options.onUnhandledRequest === "function") {
-            return options.onUnhandledRequest(
-              request,
-              print
-            );
+          if (typeof listenOptions.onUnhandledRequest === "function") {
+            return listenOptions.onUnhandledRequest(request, print);
+          }
+          if (listenOptions.onUnhandledRequest === "error") print.error();
+          if (listenOptions.onUnhandledRequest === "warn" || !listenOptions.onUnhandledRequest) {
+            print.warning();
           }
           return void 0;
         }
       });
+    },
+    close() {
+      mockpit?.setTransportState({
+        mockTransportActive: false,
+        cleanupRequired: false,
+        requiresReload: false
+      });
+      return originalClose();
     }
   };
 };
 
 // src/worker.ts
-var setupMockKitWorker = async ({
-  mockkit,
+var setupMockPitWorker = async ({
+  mockpit,
   handlers,
   critical = []
 }) => {
   const { setupWorker } = await import("msw/browser");
   const worker = setupWorker(...handlers);
   const originalStart = worker.start.bind(worker);
+  const originalStop = worker.stop?.bind(worker);
   return {
     ...worker,
-    start(options = {}) {
+    start(options) {
+      const startOptions = options ?? {};
+      mockpit?.setTransportState({
+        mockTransportActive: true,
+        cleanupRequired: false,
+        requiresReload: false
+      });
       return originalStart({
-        ...options,
+        ...startOptions,
         onUnhandledRequest(request, print) {
           const criticalRequest = extractRequest(request);
           if (criticalRequest && isCriticalRequest(criticalRequest, critical)) {
-            mockkit?.record({
-              resourceKey: `transport.${criticalRequest.method}.${criticalRequest.url}`,
-              label: "Unhandled critical mock request",
-              sourceKind: "unknown",
-              status: "blocked",
-              reason: "Critical request was not handled by mock transport.",
-              request: {
-                method: criticalRequest.method,
-                url: criticalRequest.url,
-                route: `${criticalRequest.method} ${criticalRequest.url}`
-              },
-              metadata: { adapter: "msw" }
-            });
+            recordCriticalUnhandledRequest(mockpit, criticalRequest);
           }
-          if (typeof options.onUnhandledRequest === "function") {
-            return options.onUnhandledRequest(
-              request,
-              print
-            );
+          if (typeof startOptions.onUnhandledRequest === "function") {
+            return startOptions.onUnhandledRequest(request, print);
+          }
+          if (startOptions.onUnhandledRequest === "error") print.error();
+          if (startOptions.onUnhandledRequest === "warn" || !startOptions.onUnhandledRequest) {
+            print.warning();
           }
           return void 0;
         }
       });
+    },
+    stop() {
+      mockpit?.setTransportState({
+        mockTransportActive: false,
+        cleanupRequired: true,
+        requiresReload: true
+      });
+      return originalStop?.();
     }
   };
 };
@@ -237,9 +289,10 @@ var setupMockKitWorker = async ({
   cleanupMswWorkers,
   extractRequest,
   isCriticalRequest,
+  recordCriticalUnhandledRequest,
   resolveClient,
-  setupMockKitServer,
-  setupMockKitWorker,
-  withMockKitHandler
+  setupMockPitServer,
+  setupMockPitWorker,
+  withMockPitHandler
 });
 //# sourceMappingURL=index.cjs.map

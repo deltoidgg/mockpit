@@ -1,0 +1,22 @@
+{
+  "name": "@mockpit/example-vite-msw",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mockpit/browser": "workspace:*",
+    "@mockpit/core": "workspace:*",
+    "@mockpit/devtools": "workspace:*",
+    "@mockpit/msw": "workspace:*",
+    "msw": ">=2",
+    "vite": "^7.2.4"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

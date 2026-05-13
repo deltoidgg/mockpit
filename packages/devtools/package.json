@@ -1,7 +1,7 @@
 {
-  "name": "@mockkit/devtools",
+  "name": "@mockpit/devtools",
   "version": "0.0.0",
-  "description": "Framework-neutral Shadow DOM devtools for MockKit.",
+  "description": "Framework-neutral Shadow DOM devtools for MockPit.",
   "type": "module",
   "sideEffects": true,
   "main": "./dist/index.cjs",
@@ -18,10 +18,10 @@
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run src"
+    "test": "vitest run --root ../.. packages/devtools/src"
   },
   "dependencies": {
-    "@mockkit/browser": "workspace:*",
-    "@mockkit/core": "workspace:*"
+    "@mockpit/browser": "workspace:*",
+    "@mockpit/core": "workspace:*"
   }
 }

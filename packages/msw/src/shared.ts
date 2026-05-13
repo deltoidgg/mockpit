@@ -1,4 +1,5 @@
-import type { MockKitClient } from "@mockkit/browser"
+import type { MockPitClient } from "@mockpit/browser"
+import type { AnyHandler } from "msw"
 
 export interface CriticalRequest {
   readonly method: string
@@ -7,21 +8,16 @@ export interface CriticalRequest {
 
 export type CriticalMatcher = string | RegExp | ((request: CriticalRequest) => boolean)
 
-export interface MockKitMswOptions {
-  readonly mockkit?: MockKitClient
-  readonly handlers: readonly unknown[]
+export interface MockPitMswOptions {
+  readonly mockpit?: MockPitClient
+  readonly handlers: readonly AnyHandler[]
   readonly critical?: readonly CriticalMatcher[]
 }
 
-export interface StartOptions {
-  readonly onUnhandledRequest?: unknown
-  readonly [key: string]: unknown
-}
-
-export const resolveClient = (client: MockKitClient | undefined): MockKitClient | undefined => {
+export const resolveClient = (client: MockPitClient | undefined): MockPitClient | undefined => {
   if (client) return client
   if (typeof window === "undefined") return undefined
-  return window.__MOCKKIT__?.client
+  return window.__MOCKPIT__?.client
 }
 
 export const extractRequest = (value: unknown): CriticalRequest | undefined => {
@@ -57,9 +53,32 @@ export const isCriticalRequest = (
   })
 }
 
+export const recordCriticalUnhandledRequest = (
+  mockpit: MockPitClient | undefined,
+  request: CriticalRequest,
+): void => {
+  const record = mockpit?.recordTransportIssue({
+    resourceKey: `transport.${request.method}.${request.url}`,
+    label: "Unhandled critical mock request",
+    sourceKind: "unknown",
+    status: "blocked",
+    reason: "Critical request was not handled by mock transport.",
+    request: {
+      method: request.method,
+      url: request.url,
+      route: `${request.method} ${request.url}`,
+    },
+    metadata: { adapter: "msw" },
+  })
+  if (!record || !mockpit) return
+  mockpit.setTransportState({
+    issues: [...(mockpit.getTransportState().issues ?? []), record],
+  })
+}
+
 const safePathname = (url: string): string => {
   try {
-    return new URL(url, "http://mockkit.local").pathname
+    return new URL(url, "http://mockpit.local").pathname
   } catch {
     return url
   }

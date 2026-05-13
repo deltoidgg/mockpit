@@ -2,7 +2,7 @@ import type {
   AuditRecord,
   AuditStatus,
   CaptureEvaluation,
-  MockKitConfig,
+  MockPitConfig,
   ProvenanceMode,
   RouteSummary,
   SectionSummary,
@@ -73,7 +73,7 @@ export const summariseSection = (
 })
 
 export const summariseRoute = (
-  config: MockKitConfig,
+  config: MockPitConfig,
   records: readonly AuditRecord[],
   routePath: string,
   mode: ProvenanceMode,

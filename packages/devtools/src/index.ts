@@ -1,10 +1,14 @@
 export * from "./devtools"
 export * from "./mark"
+export * from "./section"
 
-import { defineMockKitElements } from "./devtools"
-import { defineMockKitMarkElement } from "./mark"
+import { defineMockPitElements } from "./devtools"
+import { defineMockPitMarkElement, registerAttributeMarks } from "./mark"
+import { defineMockPitSectionElement } from "./section"
 
-export const defineAllMockKitElements = (): void => {
-  defineMockKitElements()
-  defineMockKitMarkElement()
+export const defineAllMockPitElements = (): void => {
+  defineMockPitElements()
+  defineMockPitMarkElement()
+  defineMockPitSectionElement()
+  queueMicrotask(() => registerAttributeMarks())
 }

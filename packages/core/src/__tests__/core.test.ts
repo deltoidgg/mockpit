@@ -1,19 +1,24 @@
 import { describe, expect, it } from "vitest"
 import {
   createAuditRecord,
+  createInitialScenarioState,
+  createRouteAuditExport,
   defineCapturePolicy,
-  defineMockKitConfig,
+  defineMockPitConfig,
   defineResource,
+  defineScenario,
   defineSection,
   evaluateCapture,
   formatSourceMix,
+  routeAuditToMarkdown,
   redactRecord,
+  setScenarioVariant,
   summariseRoute,
 } from "../index"
 
-describe("@mockkit/core", () => {
+describe("@mockpit/core", () => {
   it("summarises route source distribution and highest risk", () => {
-    const config = defineMockKitConfig({
+    const config = defineMockPitConfig({
       project: "test",
       resources: [
         defineResource({ key: "customers.list", label: "Customers" }),
@@ -53,7 +58,7 @@ describe("@mockkit/core", () => {
   })
 
   it("blocks capture when required resources are not live enough", () => {
-    const config = defineMockKitConfig({
+    const config = defineMockPitConfig({
       project: "test",
       resources: [defineResource({ key: "customers.evidence", label: "Evidence" })],
       capture: [
@@ -89,5 +94,50 @@ describe("@mockkit/core", () => {
     })
 
     expect(redactRecord(record)).not.toHaveProperty("metadata")
+  })
+
+  it("creates scenario state separately from source provenance", () => {
+    const config = defineMockPitConfig({
+      project: "test",
+      scenarios: [
+        defineScenario({
+          key: "persona",
+          label: "Persona",
+          defaultVariant: "buyer",
+          variants: [{ key: "buyer", label: "Buyer" }, { key: "operator", label: "Operator" }],
+        }),
+      ],
+    })
+
+    const state = setScenarioVariant(createInitialScenarioState(config, "now"), "persona", "operator", "later")
+
+    expect(state.selected.persona).toBe("operator")
+    expect(state.updatedAt).toBe("later")
+  })
+
+  it("exports route audits and Markdown from the shared core", () => {
+    const config = defineMockPitConfig({
+      project: "test",
+      resources: [defineResource({ key: "customers.list", label: "Customers" })],
+    })
+    const records = [
+      createAuditRecord({
+        routePath: "/customers",
+        resourceKey: "customers.list",
+        sourceKind: "api",
+        status: "ready",
+      }),
+    ]
+
+    const routeExport = createRouteAuditExport({
+      config,
+      routePath: "/customers",
+      mode: "live",
+      records,
+      generatedAt: "2026-05-13T00:00:00.000Z",
+    })
+
+    expect(routeExport.records).toHaveLength(1)
+    expect(routeAuditToMarkdown(routeExport)).toContain("MockPit Route Audit")
   })
 })

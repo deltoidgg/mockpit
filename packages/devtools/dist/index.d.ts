@@ -1,37 +1,42 @@
-import { MockKitClient } from '@mockkit/browser';
+import { MockPitClient } from '@mockpit/browser';
 
-interface MountMockKitDevtoolsOptions {
-    readonly client?: MockKitClient;
+interface MountMockPitDevtoolsOptions {
+    readonly client?: MockPitClient;
     readonly initialIsOpen?: boolean;
     readonly position?: "bottom-left" | "bottom-right";
     readonly panelPosition?: "left" | "right";
 }
-declare class MockKitDevtoolsElement extends HTMLElement {
-    client: MockKitClient | undefined;
+declare class MockPitDevtoolsElement extends HTMLElement {
+    client: MockPitClient | undefined;
     private isOpen;
     private selectedTab;
     private position;
     private panelPosition;
+    private filters;
     private unsubscribe;
+    private previousMode;
     private readonly keyHandler;
     connectedCallback(): void;
     disconnectedCallback(): void;
-    setClient(client: MockKitClient): void;
+    setClient(client: MockPitClient): void;
+    private handleClientUpdate;
     private setOpen;
     private render;
     private renderTrigger;
     private renderPanel;
     private renderTab;
     private bindEvents;
-    private readOpenState;
-    private writeOpenState;
-    private openStateKey;
+    private applyHighlightFilter;
+    private focusTab;
+    private readState;
+    private writeState;
+    private statePrefix;
 }
-declare const defineMockKitElements: () => void;
-declare const mountMockKitDevtools: (options?: MountMockKitDevtoolsOptions) => MockKitDevtoolsElement;
+declare const defineMockPitElements: () => void;
+declare const mountMockPitDevtools: (options?: MountMockPitDevtoolsOptions) => MockPitDevtoolsElement;
 
-declare class MockKitMarkElement extends HTMLElement {
-    client: MockKitClient | undefined;
+declare class MockPitMarkElement extends HTMLElement {
+    client: MockPitClient | undefined;
     private recordId;
     private unsubscribe;
     connectedCallback(): void;
@@ -39,8 +44,18 @@ declare class MockKitMarkElement extends HTMLElement {
     private record;
     private applyHighlight;
 }
-declare const defineMockKitMarkElement: () => void;
+declare const defineMockPitMarkElement: () => void;
+declare const registerAttributeMarks: (client?: MockPitClient) => void;
 
-declare const defineAllMockKitElements: () => void;
+declare class MockPitSectionElement extends HTMLElement {
+    client: MockPitClient | undefined;
+    private unsubscribe;
+    connectedCallback(): void;
+    disconnectedCallback(): void;
+    private applyHighlight;
+}
+declare const defineMockPitSectionElement: () => void;
 
-export { MockKitDevtoolsElement, MockKitMarkElement, type MountMockKitDevtoolsOptions, defineAllMockKitElements, defineMockKitElements, defineMockKitMarkElement, mountMockKitDevtools };
+declare const defineAllMockPitElements: () => void;
+
+export { MockPitDevtoolsElement, MockPitMarkElement, MockPitSectionElement, type MountMockPitDevtoolsOptions, defineAllMockPitElements, defineMockPitElements, defineMockPitMarkElement, defineMockPitSectionElement, mountMockPitDevtools, registerAttributeMarks };

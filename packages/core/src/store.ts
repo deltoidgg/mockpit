@@ -9,7 +9,7 @@ export interface AuditStoreService {
   readonly clear: () => void
 }
 
-export const AuditStore = Context.GenericTag<AuditStoreService>("@mockkit/core/AuditStore")
+export const AuditStore = Context.GenericTag<AuditStoreService>("@mockpit/core/AuditStore")
 
 export const createMemoryAuditStore = (): AuditStoreService => {
   const records = new Map<string, AuditRecord>()

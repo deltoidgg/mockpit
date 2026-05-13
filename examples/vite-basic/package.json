@@ -1,5 +1,5 @@
 {
-  "name": "@mockkit/example-vite-basic",
+  "name": "@mockpit/example-vite-basic",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -9,9 +9,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@mockkit/browser": "workspace:*",
-    "@mockkit/core": "workspace:*",
-    "@mockkit/devtools": "workspace:*",
+    "@mockpit/browser": "workspace:*",
+    "@mockpit/core": "workspace:*",
+    "@mockpit/devtools": "workspace:*",
     "vite": "^7.2.4"
   },
   "devDependencies": {

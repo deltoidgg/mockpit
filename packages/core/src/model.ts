@@ -30,6 +30,10 @@ export type ProvenanceMode = (typeof provenanceModes)[number]
 
 export type Criticality = "proof" | "presentation" | "debug"
 
+export type AuditRecordKind = "resource" | "uiMark" | "section" | "transport"
+
+export type AuditRecordVisibility = "mounted" | "stale" | "unmounted"
+
 export interface RequestDescriptor {
   readonly method?: string
   readonly url?: string
@@ -50,6 +54,53 @@ export interface ScenarioDescriptor {
   readonly variant?: string
 }
 
+export interface ScenarioDefinition {
+  readonly key: string
+  readonly label: string
+  readonly variants: readonly ScenarioVariant[]
+  readonly defaultVariant?: string
+}
+
+export interface ScenarioVariant {
+  readonly key: string
+  readonly label: string
+  readonly description?: string
+}
+
+export interface ScenarioState {
+  readonly selected: Record<string, string>
+  readonly updatedAt: string
+}
+
+export interface TransportState {
+  readonly mockTransportActive: boolean
+  readonly cleanupRequired: boolean
+  readonly requiresReload: boolean
+  readonly lastCleanup?: {
+    readonly checked: number
+    readonly unregistered: number
+    readonly updatedAt: string
+  }
+  readonly handlers?: readonly TransportHandlerDescriptor[]
+  readonly issues?: readonly AuditRecord[]
+}
+
+export interface TransportHandlerDescriptor {
+  readonly resourceKey?: string | undefined
+  readonly method?: string | undefined
+  readonly url?: string | undefined
+  readonly label?: string | undefined
+  readonly scenario?: string | undefined
+}
+
+export interface ModeTransition {
+  readonly previousMode: ProvenanceMode
+  readonly nextMode: ProvenanceMode
+  readonly requiresReload: boolean
+  readonly transportCleanupRequired: boolean
+  readonly reason?: string | undefined
+}
+
 export interface SourceLocation {
   readonly file?: string
   readonly line?: number
@@ -59,6 +110,8 @@ export interface SourceLocation {
 
 export interface AuditRecord {
   readonly id: string
+  readonly kind?: AuditRecordKind
+  readonly visibility?: AuditRecordVisibility
   readonly routePath: string
   readonly routePattern?: string
   readonly sectionId?: string
@@ -72,6 +125,9 @@ export interface AuditRecord {
   readonly fieldCoverage?: FieldCoverage
   readonly scenario?: ScenarioDescriptor
   readonly sourceLocation?: SourceLocation
+  readonly fallbackSource?: string
+  readonly remediation?: string
+  readonly recordedBy?: string
   readonly proofCritical?: boolean
   readonly tags?: readonly string[]
   readonly metadata?: Record<string, unknown>
@@ -80,6 +136,8 @@ export interface AuditRecord {
 
 export interface AuditRecordInput {
   readonly id?: string | undefined
+  readonly kind?: AuditRecordKind | undefined
+  readonly visibility?: AuditRecordVisibility | undefined
   readonly routePath?: string | undefined
   readonly routePattern?: string | undefined
   readonly sectionId?: string | undefined
@@ -93,6 +151,9 @@ export interface AuditRecordInput {
   readonly fieldCoverage?: FieldCoverage | undefined
   readonly scenario?: ScenarioDescriptor | undefined
   readonly sourceLocation?: SourceLocation | undefined
+  readonly fallbackSource?: string | undefined
+  readonly remediation?: string | undefined
+  readonly recordedBy?: string | undefined
   readonly proofCritical?: boolean | undefined
   readonly tags?: readonly string[] | undefined
   readonly metadata?: Record<string, unknown> | undefined
@@ -134,6 +195,8 @@ export interface ResourceDefinition<A = unknown> {
   readonly schema?: unknown
   readonly assess?: (data: A, context: AssessContext) => AssessResult | Promise<AssessResult>
   readonly fallback?: (context: FallbackContext) => A | Promise<A>
+  readonly fallbackSource?: string
+  readonly remediation?: string
   readonly criticality?: Criticality
   readonly tags?: readonly string[]
 }
@@ -184,12 +247,13 @@ export interface ModeConfig {
   readonly storageKey?: string
 }
 
-export interface MockKitConfig {
+export interface MockPitConfig {
   readonly project: string
   readonly mode: Required<ModeConfig>
   readonly resources: readonly ResourceDefinition<any>[]
   readonly sections: readonly SectionDefinition[]
   readonly capture: readonly CapturePolicy[]
+  readonly scenarios: readonly ScenarioDefinition[]
   readonly redaction: RedactionPolicy
 }
 
@@ -231,13 +295,36 @@ export interface CaptureEvaluation {
   readonly resources: readonly CaptureResourceEvaluation[]
 }
 
-export interface MockKitSnapshot {
+export interface MockPitSnapshot {
+  readonly version?: string
   readonly project: string
   readonly mode: ProvenanceMode
   readonly routePath: string
   readonly records: readonly AuditRecord[]
   readonly summary: RouteSummary
+  readonly scenarios?: ScenarioState
+  readonly transport?: TransportState
   readonly updatedAt: string
+}
+
+export interface ExportManifest {
+  readonly project: string
+  readonly generatedAt: string
+  readonly routes: readonly string[]
+  readonly recordCount: number
+  readonly redaction: RedactionPolicy
+  readonly capture: Record<string, CaptureEvaluation["status"]>
+}
+
+export interface RouteAuditExport {
+  readonly project: string
+  readonly routePath: string
+  readonly generatedAt: string
+  readonly summary: RouteSummary
+  readonly records: readonly Partial<AuditRecord>[]
+  readonly scenarios?: ScenarioState
+  readonly transport?: TransportState
+  readonly redaction: RedactionPolicy
 }
 
 export const sourceKindLabels: Record<SourceKind, string> = {
@@ -287,6 +374,8 @@ export const createAuditRecord = (input: AuditRecordInput): AuditRecord => {
 
   return {
     id,
+    kind: input.kind ?? "resource",
+    visibility: input.visibility ?? "mounted",
     routePath,
     resourceKey: input.resourceKey,
     label,
@@ -301,6 +390,9 @@ export const createAuditRecord = (input: AuditRecordInput): AuditRecord => {
     ...(input.fieldCoverage ? { fieldCoverage: input.fieldCoverage } : {}),
     ...(input.scenario ? { scenario: input.scenario } : {}),
     ...(input.sourceLocation ? { sourceLocation: input.sourceLocation } : {}),
+    ...(input.fallbackSource ? { fallbackSource: input.fallbackSource } : {}),
+    ...(input.remediation ? { remediation: input.remediation } : {}),
+    ...(input.recordedBy ? { recordedBy: input.recordedBy } : {}),
     ...(typeof input.proofCritical === "boolean" ? { proofCritical: input.proofCritical } : {}),
     ...(input.tags ? { tags: input.tags } : {}),
     ...(input.metadata ? { metadata: input.metadata } : {}),

@@ -1,53 +1,64 @@
-import type { MockKitClient } from "@mockkit/browser"
-import { extractRequest, isCriticalRequest, type CriticalMatcher, type StartOptions } from "./shared"
+import type { MockPitClient } from "@mockpit/browser"
+import type { AnyHandler } from "msw"
+import type { SetupWorker, StartOptions } from "msw/browser"
+import {
+  extractRequest,
+  isCriticalRequest,
+  recordCriticalUnhandledRequest,
+  type CriticalMatcher,
+} from "./shared"
 
-export interface SetupMockKitWorkerOptions {
-  readonly mockkit?: MockKitClient
-  readonly handlers: readonly unknown[]
+export interface SetupMockPitWorkerOptions {
+  readonly mockpit?: MockPitClient
+  readonly handlers: readonly AnyHandler[]
   readonly critical?: readonly CriticalMatcher[]
 }
 
-export const setupMockKitWorker = async ({
-  mockkit,
+export const setupMockPitWorker = async ({
+  mockpit,
   handlers,
   critical = [],
-}: SetupMockKitWorkerOptions): Promise<any> => {
+}: SetupMockPitWorkerOptions): Promise<SetupWorker> => {
   const { setupWorker } = await import("msw/browser")
-  const worker = setupWorker(...(handlers as any[]))
+  const worker = setupWorker(...handlers)
   const originalStart = worker.start.bind(worker)
+  const originalStop = worker.stop?.bind(worker)
 
   return {
     ...worker,
-    start(options: StartOptions = {}) {
+    start(options?: StartOptions) {
+      const startOptions = options ?? {}
+      mockpit?.setTransportState({
+        mockTransportActive: true,
+        cleanupRequired: false,
+        requiresReload: false,
+      })
       return originalStart({
-        ...options,
-        onUnhandledRequest(request: unknown, print: unknown) {
+        ...startOptions,
+        onUnhandledRequest(request, print) {
           const criticalRequest = extractRequest(request)
           if (criticalRequest && isCriticalRequest(criticalRequest, critical)) {
-            mockkit?.record({
-              resourceKey: `transport.${criticalRequest.method}.${criticalRequest.url}`,
-              label: "Unhandled critical mock request",
-              sourceKind: "unknown",
-              status: "blocked",
-              reason: "Critical request was not handled by mock transport.",
-              request: {
-                method: criticalRequest.method,
-                url: criticalRequest.url,
-                route: `${criticalRequest.method} ${criticalRequest.url}`,
-              },
-              metadata: { adapter: "msw" },
-            })
+            recordCriticalUnhandledRequest(mockpit, criticalRequest)
           }
 
-          if (typeof options.onUnhandledRequest === "function") {
-            return (options.onUnhandledRequest as (request: unknown, print: unknown) => unknown)(
-              request,
-              print,
-            )
+          if (typeof startOptions.onUnhandledRequest === "function") {
+            return startOptions.onUnhandledRequest(request, print)
+          }
+          if (startOptions.onUnhandledRequest === "error") print.error()
+          if (startOptions.onUnhandledRequest === "warn" || !startOptions.onUnhandledRequest) {
+            print.warning()
           }
           return undefined
         },
       })
+    },
+    stop() {
+      mockpit?.setTransportState({
+        mockTransportActive: false,
+        cleanupRequired: true,
+        requiresReload: true,
+      })
+      return originalStop?.()
     },
   }
 }
