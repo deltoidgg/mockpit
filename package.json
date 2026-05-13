@@ -1,0 +1,32 @@
+{
+  "name": "mockkit-workspace",
+  "version": "0.0.0",
+  "private": true,
+  "description": "MockKit monorepo for runtime prototype provenance devtools.",
+  "type": "module",
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "corepack pnpm -r --sort build",
+    "typecheck": "corepack pnpm -r --sort typecheck",
+    "test": "vitest run",
+    "lint": "eslint .",
+    "dev:example": "corepack pnpm --filter @mockkit/example-vite-basic dev",
+    "turbo:build": "turbo run build",
+    "turbo:typecheck": "turbo run typecheck"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.29.7",
+    "@eslint/js": "^9.39.1",
+    "@types/node": "^24.10.1",
+    "eslint": "^9.39.1",
+    "jsdom": "^27.2.0",
+    "tsup": "^8.5.0",
+    "turbo": "^2.6.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.4",
+    "vitest": "^4.0.14"
+  }
+}
