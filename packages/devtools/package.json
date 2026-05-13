@@ -1,7 +1,19 @@
 {
   "name": "@mockpit/devtools",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "Framework-neutral Shadow DOM devtools for MockPit.",
+  "license": "MIT",
+  "author": "rerixo",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/deltoidgg/mockpit.git",
+    "directory": "packages/devtools"
+  },
+  "homepage": "https://github.com/deltoidgg/mockpit/tree/main/packages/devtools#readme",
+  "bugs": "https://github.com/deltoidgg/mockpit/issues",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "sideEffects": true,
   "main": "./dist/index.cjs",

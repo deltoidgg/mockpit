@@ -3,6 +3,14 @@
   "version": "0.0.0",
   "private": true,
   "description": "MockPit monorepo for runtime prototype provenance devtools.",
+  "license": "MIT",
+  "author": "rerixo",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/deltoidgg/mockpit.git"
+  },
+  "homepage": "https://github.com/deltoidgg/mockpit#readme",
+  "bugs": "https://github.com/deltoidgg/mockpit/issues",
   "type": "module",
   "packageManager": "pnpm@9.15.4",
   "engines": {

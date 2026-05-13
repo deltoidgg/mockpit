@@ -1,7 +1,19 @@
 {
   "name": "@mockpit/cli",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "MockPit command-line tools for setup checks and route audits.",
+  "license": "MIT",
+  "author": "rerixo",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/deltoidgg/mockpit.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/deltoidgg/mockpit/tree/main/packages/cli#readme",
+  "bugs": "https://github.com/deltoidgg/mockpit/issues",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "sideEffects": false,
   "main": "./dist/index.cjs",
