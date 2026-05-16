@@ -27,7 +27,7 @@ export class MockPitSectionElement extends HTMLElement {
     }
     const section = client.snapshot().summary.sections.find((candidate) => candidate.id === sectionId)
     if (!section) return
-    this.style.outline = "1px solid #2563eb"
+    this.style.outline = "1px dashed #34d399"
     this.style.outlineOffset = "4px"
     this.title = `${section.label}: ${formatSourceMix(section.sourceCounts)}`
   }

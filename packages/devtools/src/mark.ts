@@ -64,9 +64,9 @@ export class MockPitMarkElement extends HTMLElement {
       this.style.boxShadow = ""
       return
     }
-    this.style.outline = "2px solid #f59e0b"
+    this.style.outline = "2px solid #34d399"
     this.style.outlineOffset = "2px"
-    this.style.boxShadow = "0 0 0 4px rgba(245, 158, 11, 0.16)"
+    this.style.boxShadow = "0 0 0 4px rgba(52, 211, 153, 0.15)"
     this.title = `${this.dataset.label ?? this.dataset.resourceKey}: ${sourceKind}`
   }
 }
