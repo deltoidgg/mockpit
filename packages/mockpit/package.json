@@ -1,0 +1,102 @@
+{
+  "name": "mockpit",
+  "version": "0.2.0",
+  "description": "See what is still mock, watch it become real. A migration ledger and x-ray overlay for mock-first apps.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/deltoidgg/mockpit.git",
+    "directory": "packages/mockpit"
+  },
+  "homepage": "https://github.com/deltoidgg/mockpit#readme",
+  "bugs": "https://github.com/deltoidgg/mockpit/issues",
+  "keywords": [
+    "msw",
+    "mock",
+    "devtools",
+    "overlay",
+    "effect",
+    "foldkit",
+    "migration"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "bin": {
+    "mockpit": "./dist/cli/bin.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./msw": {
+      "types": "./dist/msw/index.d.ts",
+      "import": "./dist/msw/index.js"
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "import": "./dist/react/index.js"
+    },
+    "./effect": {
+      "types": "./dist/effect/index.d.ts",
+      "import": "./dist/effect/index.js"
+    },
+    "./foldkit": {
+      "types": "./dist/foldkit/index.d.ts",
+      "import": "./dist/foldkit/index.js"
+    },
+    "./vite": {
+      "types": "./dist/vite/index.d.ts",
+      "import": "./dist/vite/index.js"
+    },
+    "./cli": {
+      "types": "./dist/cli/index.d.ts",
+      "import": "./dist/cli/index.js"
+    },
+    "./schema": {
+      "types": "./dist/schema/index.d.ts",
+      "import": "./dist/schema/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --root ../.. packages/mockpit"
+  },
+  "dependencies": {
+    "@effect/platform-browser": "4.1.2",
+    "effect": "4.1.2",
+    "foldkit": "0.170.0"
+  },
+  "peerDependencies": {
+    "msw": ">=2.4 <4",
+    "react": ">=18",
+    "vite": ">=6"
+  },
+  "peerDependenciesMeta": {
+    "msw": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "vite": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "graphql": "16",
+    "msw": "3.0.3",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "tsup": "9.0.0",
+    "vite": "8.3.6"
+  }
+}

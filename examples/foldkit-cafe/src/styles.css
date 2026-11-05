@@ -1,0 +1,17 @@
+:root { font: 16px/1.55 "Iowan Old Style", Georgia, serif; color: #23211d; background: #f6f2ea; }
+body { margin: 0; }
+main { max-width: 640px; margin: 0 auto; padding: 40px 24px 80px; }
+header { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #23211d; padding-bottom: 8px; }
+h1 { margin: 0; font-size: 30px; letter-spacing: -0.01em; }
+h2 { font-size: 15px; font-weight: 600; margin: 28px 0 8px; }
+.hours { margin: 0; color: #6b6458; }
+.special { background: #fffdf8; border: 1px solid #e3dccd; padding: 4px 18px 14px; margin-top: 24px; }
+.menu { list-style: none; padding: 0; margin: 0; }
+.menu li { padding: 12px 0; border-bottom: 1px dashed #d9d1c0; }
+.item-head { display: flex; justify-content: space-between; }
+.item-name { font-weight: 600; }
+.price { font-variant-numeric: tabular-nums; }
+.quiet { color: #6b6458; margin: 2px 0 0; }
+.allergens { font-size: 14px; margin: 2px 0 0; color: #8a4b1f; }
+footer { margin-top: 28px; display: flex; gap: 16px; align-items: center; }
+button { font: inherit; background: #23211d; color: #f6f2ea; border: 0; padding: 6px 14px; cursor: pointer; }

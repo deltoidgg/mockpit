@@ -1,0 +1,75 @@
+name: mockpit ledger report
+description: Comment the mockpit ledger diff on a pull request and fail on regressions.
+
+inputs:
+  working-directory:
+    description: Directory containing .mockpit/ledger.json
+    default: "."
+  ledger:
+    description: Ledger path, relative to working-directory
+    default: ".mockpit/ledger.json"
+  base:
+    description: Git ref to compare against. Defaults to the pull request base branch.
+    default: ""
+  mockpit:
+    description: Command that runs the mockpit CLI
+    default: "npx mockpit"
+  comment:
+    description: Post or update a pull request comment
+    default: "true"
+  fail-on-regression:
+    description: Fail when an endpoint goes back to a mock
+    default: "true"
+  max-mocked:
+    description: Fail when more endpoints than this are still mock-backed
+    default: ""
+  min-parity:
+    description: Fail when a shadowed endpoint's parity is below this (0 to 1)
+    default: ""
+  github-token:
+    description: Token for commenting
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - name: Report
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        BASE: ${{ inputs.base || format('origin/{0}', github.base_ref || 'main') }}
+      run: |
+        git fetch --no-tags --depth=200 origin "${BASE#origin/}" || true
+        ${{ inputs.mockpit }} report --ledger "${{ inputs.ledger }}" --base "$BASE" --out "$RUNNER_TEMP/mockpit-report.md"
+        {
+          echo "<!-- mockpit-ledger -->"
+          cat "$RUNNER_TEMP/mockpit-report.md"
+        } > "$RUNNER_TEMP/mockpit-comment.md"
+        cat "$RUNNER_TEMP/mockpit-report.md" >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Comment
+      if: inputs.comment == 'true' && github.event_name == 'pull_request'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        PR: ${{ github.event.pull_request.number }}
+        REPO: ${{ github.repository }}
+      run: |
+        existing=$(gh api "repos/$REPO/issues/$PR/comments" --paginate --jq '.[] | select(.body | startswith("<!-- mockpit-ledger -->")) | .id' | head -n1)
+        if [ -n "$existing" ]; then
+          gh api -X PATCH "repos/$REPO/issues/comments/$existing" -F body=@"$RUNNER_TEMP/mockpit-comment.md" > /dev/null
+        else
+          gh pr comment "$PR" --repo "$REPO" --body-file "$RUNNER_TEMP/mockpit-comment.md"
+        fi
+
+    - name: Check
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        BASE: ${{ inputs.base || format('origin/{0}', github.base_ref || 'main') }}
+      run: |
+        args=(--ledger "${{ inputs.ledger }}" --base "$BASE")
+        if [ "${{ inputs.fail-on-regression }}" != "true" ]; then args+=(--allow-regressions); fi
+        if [ -n "${{ inputs.max-mocked }}" ]; then args+=(--max-mocked "${{ inputs.max-mocked }}"); fi
+        if [ -n "${{ inputs.min-parity }}" ]; then args+=(--min-parity "${{ inputs.min-parity }}"); fi
+        ${{ inputs.mockpit }} check "${args[@]}"

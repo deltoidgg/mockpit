@@ -2,39 +2,34 @@
   "name": "mockpit-workspace",
   "version": "0.0.0",
   "private": true,
-  "description": "MockPit monorepo for runtime prototype provenance devtools.",
+  "description": "MockPit: see what is still mock, watch it become real.",
   "license": "MIT",
-  "author": "rerixo",
   "repository": {
     "type": "git",
     "url": "https://github.com/deltoidgg/mockpit.git"
   },
-  "homepage": "https://github.com/deltoidgg/mockpit#readme",
-  "bugs": "https://github.com/deltoidgg/mockpit/issues",
   "type": "module",
   "packageManager": "pnpm@9.15.4",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
-    "build": "corepack pnpm -r --sort build",
-    "typecheck": "corepack pnpm -r --sort typecheck",
+    "build": "corepack pnpm --filter mockpit build",
+    "typecheck": "corepack pnpm -r typecheck",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "lint": "eslint .",
-    "dev:example": "corepack pnpm --filter @mockpit/example-vite-basic dev",
-    "turbo:build": "turbo run build",
-    "turbo:typecheck": "turbo run typecheck"
+    "dev": "corepack pnpm --filter @mockpit/example-react-msw dev",
+    "dev:cafe": "corepack pnpm --filter @mockpit/example-foldkit-cafe dev"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.29.7",
     "@eslint/js": "^9.39.1",
+    "@playwright/test": "1.64.1",
     "@types/node": "^24.10.1",
     "eslint": "^9.39.1",
-    "jsdom": "^27.2.0",
-    "tsup": "^8.5.0",
-    "turbo": "^2.6.1",
-    "typescript": "^5.9.3",
+    "jsdom": "^27.4.0",
+    "typescript": "6.0.3",
     "typescript-eslint": "^8.46.4",
-    "vitest": "^4.0.14"
+    "vitest": "5.1.0"
   }
 }
