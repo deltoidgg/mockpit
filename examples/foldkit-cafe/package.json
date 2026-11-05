@@ -1,0 +1,23 @@
+{
+  "name": "@mockpit/example-foldkit-cafe",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "deploy": "alchemy deploy"
+  },
+  "dependencies": {
+    "@effect/platform-browser": "4.1.2",
+    "effect": "4.1.2",
+    "foldkit": "0.170.0"
+  },
+  "devDependencies": {
+    "alchemy": "2.0.0-beta.84",
+    "mockpit": "workspace:*",
+    "vite": "8.3.6",
+    "@alchemy.run/cloudflare": "2.0.0-beta.84",
+    "@foldkit/vite-plugin": "0.29.0"
+  }
+}

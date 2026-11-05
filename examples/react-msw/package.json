@@ -1,0 +1,25 @@
+{
+  "name": "@mockpit/example-react-msw",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "6.2.1",
+    "mockpit": "workspace:*",
+    "msw": "3.0.3",
+    "vite": "8.3.6"
+  },
+  "msw": {
+    "workerDirectory": ["public"]
+  }
+}
